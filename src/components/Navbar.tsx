@@ -6,23 +6,30 @@ import { MessageCircle, Inbox } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 export default function Navbar() {
-  const [savedUser, setSavedUser] = useState<string | null>(null);
+  const [authenticatedUser, setAuthenticatedUser] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState<number>(0);
 
   useEffect(() => {
-    const user = localStorage.getItem("bolo_current_user");
-    if (user) {
-      setSavedUser(user);
-      // Fetch unread count
-      supabase
-        .from("bolo_messages")
-        .select("id", { count: "exact", head: true })
-        .eq("recipient_username", user)
-        .eq("is_read", false)
-        .then(({ count }) => {
-          if (count !== null) setUnreadCount(count);
-        });
-    }
+    fetch("/api/auth/me")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.authenticated && data?.username) {
+          setAuthenticatedUser(data.username);
+          supabase
+            .from("bolo_messages")
+            .select("id", { count: "exact", head: true })
+            .eq("recipient_username", data.username)
+            .eq("is_read", false)
+            .then(({ count }) => {
+              if (count !== null) setUnreadCount(count);
+            });
+        } else {
+          setAuthenticatedUser(null);
+        }
+      })
+      .catch(() => {
+        setAuthenticatedUser(null);
+      });
   }, []);
 
   return (
@@ -37,8 +44,8 @@ export default function Navbar() {
         </span>
       </Link>
 
-      {/* Action */}
-      {savedUser && (
+      {/* Authenticated Inbox Shortcut */}
+      {authenticatedUser && (
         <Link
           href="/inbox"
           className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900 border border-white/10 hover:border-pink-500/40 text-xs font-semibold text-zinc-300 transition-all"

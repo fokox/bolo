@@ -2,59 +2,98 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Copy, Check, ArrowRight, Sparkles, Inbox, RefreshCw } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { Copy, Check, ArrowRight, Sparkles, Inbox, RefreshCw, LogOut, Lock } from "lucide-react";
 import AdBanner from "@/components/AdBanner";
 
 export default function HomePage() {
-  const [username, setUsername] = useState("");
   const [activeUser, setActiveUser] = useState<string | null>(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  // Form State
+  const [isLoginMode, setIsLoginMode] = useState(false);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const [copied, setCopied] = useState(false);
   const [origin, setOrigin] = useState("");
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       setOrigin(window.location.origin);
-      const saved = localStorage.getItem("bolo_current_user");
-      if (saved) {
-        setActiveUser(saved);
-        setUsername(saved);
-      }
     }
+    checkSession();
   }, []);
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const clean = username.trim().toLowerCase().replace(/[^a-z0-9_.]/g, "");
-    if (!clean) return;
-
-    setLoading(true);
+  const checkSession = async () => {
     try {
-      // Check or insert profile
-      const { data: existing } = await supabase
-        .from("bolo_profiles")
-        .select("username")
-        .eq("username", clean)
-        .maybeSingle();
+      const res = await fetch("/api/auth/me");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.authenticated && data.username) {
+          setActiveUser(data.username);
+        }
+      }
+    } catch {
+      // not logged in
+    } finally {
+      setCheckingAuth(false);
+    }
+  };
 
-      if (!existing) {
-        await supabase.from("bolo_profiles").insert({
-          username: clean,
-          display_name: clean,
-        });
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    const cleanUsername = username.trim().toLowerCase().replace(/[^a-z0-9_.]/g, "");
+    if (!cleanUsername) {
+      setError("Please enter a valid username.");
+      setLoading(false);
+      return;
+    }
+
+    if (!password || password.length < 4) {
+      setError("Password must be at least 4 characters.");
+      setLoading(false);
+      return;
+    }
+
+    const endpoint = isLoginMode ? "/api/auth/login" : "/api/auth/register";
+
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: cleanUsername,
+          password,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Authentication failed.");
+        setLoading(false);
+        return;
       }
 
-      localStorage.setItem("bolo_current_user", clean);
-      setActiveUser(clean);
-    } catch (err) {
-      console.error(err);
-      // Still set local user so user can proceed without being blocked
-      localStorage.setItem("bolo_current_user", clean);
-      setActiveUser(clean);
+      setActiveUser(data.username);
+      localStorage.setItem("bolo_current_user", data.username);
+      setPassword("");
+    } catch {
+      setError("Network error. Please try again.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleLogout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    setActiveUser(null);
+    localStorage.removeItem("bolo_current_user");
   };
 
   const copyLink = () => {
@@ -69,8 +108,12 @@ export default function HomePage() {
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-4 py-8 max-w-sm mx-auto w-full">
-      {activeUser ? (
-        /* Minimalist Active User View */
+      {checkingAuth ? (
+        <div className="flex items-center justify-center py-20 text-zinc-500">
+          <RefreshCw className="w-5 h-5 animate-spin text-pink-500" />
+        </div>
+      ) : activeUser ? (
+        /* Authenticated View: Active Link Card */
         <div className="w-full flex flex-col items-center text-center animate-in fade-in duration-200">
           {/* Avatar / Handle */}
           <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-pink-500 via-rose-500 to-amber-400 p-0.5 mb-3 shadow-lg shadow-pink-500/20">
@@ -79,7 +122,7 @@ export default function HomePage() {
             </div>
           </div>
           <h1 className="text-xl font-black text-white">@{activeUser}</h1>
-          <p className="text-xs text-zinc-400 mt-0.5 mb-6">Your link is ready to share</p>
+          <p className="text-xs text-zinc-400 mt-0.5 mb-6">Your link is live & authenticated</p>
 
           {/* Copy Link Box */}
           <div className="w-full p-3 rounded-2xl bg-zinc-900 border border-white/10 flex items-center justify-between gap-2 mb-3">
@@ -95,7 +138,7 @@ export default function HomePage() {
             </button>
           </div>
 
-          {/* Big Action Buttons */}
+          {/* Action Buttons */}
           <button
             onClick={copyLink}
             className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-pink-500 via-rose-500 to-amber-500 hover:opacity-95 text-white font-bold text-sm shadow-lg shadow-pink-500/25 active:scale-95 transition-all flex items-center justify-center gap-2 mb-2.5 cursor-pointer"
@@ -106,13 +149,13 @@ export default function HomePage() {
 
           <Link
             href="/inbox"
-            className="w-full py-3.5 rounded-2xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 font-semibold text-sm border border-white/10 active:scale-95 transition-all flex items-center justify-center gap-2 mb-6"
+            className="w-full py-3.5 rounded-2xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 font-semibold text-sm border border-white/10 active:scale-95 transition-all flex items-center justify-center gap-2 mb-4"
           >
             <Inbox className="w-4 h-4 text-pink-400" />
-            <span>Open Inbox</span>
+            <span>Open Private Inbox</span>
           </Link>
 
-          {/* Super Simple 2-Step Guide */}
+          {/* Quick Guide */}
           <div className="w-full p-4 rounded-2xl bg-zinc-950/60 border border-white/5 text-left text-xs space-y-2 mb-4">
             <p className="font-semibold text-zinc-300 text-[11px] uppercase tracking-wider">
               How to post on Instagram:
@@ -132,33 +175,32 @@ export default function HomePage() {
           </div>
 
           <button
-            onClick={() => {
-              localStorage.removeItem("bolo_current_user");
-              setActiveUser(null);
-              setUsername("");
-            }}
-            className="text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
+            onClick={handleLogout}
+            className="text-xs text-zinc-500 hover:text-rose-400 transition-colors flex items-center gap-1.5"
           >
-            Change username
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Log out</span>
           </button>
         </div>
       ) : (
-        /* Minimalist 1-Step Onboarding */
+        /* Unauthenticated View: Secure Register / Login Form */
         <div className="w-full flex flex-col items-center text-center">
-          {/* Header */}
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-pink-500/10 text-pink-400 text-xs font-semibold mb-4">
             <Sparkles className="w-3 h-3" />
             <span>Anonymous Instagram Q&A</span>
           </div>
 
-          <h1 className="text-3xl font-black text-white tracking-tight mb-2">
-            Get anonymous messages
+          <h1 className="text-3xl font-black text-white tracking-tight mb-1">
+            {isLoginMode ? "Log in to Bolo" : "Get your link"}
           </h1>
           <p className="text-xs text-zinc-400 mb-6 max-w-xs">
-            Enter your Instagram handle to get your personal link in seconds.
+            {isLoginMode
+              ? "Enter your username and password to access your link & inbox."
+              : "Create a username and password to protect your anonymous inbox."}
           </p>
 
-          <form onSubmit={handleCreate} className="w-full flex flex-col gap-3">
+          <form onSubmit={handleSubmit} className="w-full flex flex-col gap-3">
+            {/* Username Input */}
             <div className="relative flex items-center">
               <span className="absolute left-4 text-zinc-500 font-semibold text-sm">
                 @
@@ -167,33 +209,72 @@ export default function HomePage() {
                 type="text"
                 placeholder="your_instagram_handle"
                 value={username}
-                onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_.]/g, ""))}
+                onChange={(e) =>
+                  setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_.]/g, ""))
+                }
                 required
                 autoFocus
-                className="w-full pl-9 pr-4 py-3.5 bg-zinc-900 border border-white/10 rounded-2xl text-white placeholder-zinc-500 text-sm focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition-all font-medium"
+                className="w-full pl-9 pr-4 py-3 bg-zinc-900 border border-white/10 rounded-2xl text-white placeholder-zinc-500 text-sm focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition-all font-medium"
               />
             </div>
 
+            {/* Password Input */}
+            <div className="relative flex items-center">
+              <span className="absolute left-4 text-zinc-500">
+                <Lock className="w-4 h-4" />
+              </span>
+              <input
+                type="password"
+                placeholder="Password (min. 4 characters)"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="w-full pl-10 pr-4 py-3 bg-zinc-900 border border-white/10 rounded-2xl text-white placeholder-zinc-500 text-sm focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition-all"
+              />
+            </div>
+
+            {error && (
+              <p className="text-xs text-rose-400 bg-rose-500/10 rounded-xl p-2.5 text-center">
+                {error}
+              </p>
+            )}
+
             <button
               type="submit"
-              disabled={loading || !username.trim()}
-              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-pink-500 via-rose-500 to-amber-500 hover:opacity-95 text-white font-bold text-sm shadow-lg shadow-pink-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              disabled={loading || !username.trim() || !password}
+              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-pink-500 via-rose-500 to-amber-500 hover:opacity-95 text-white font-bold text-sm shadow-lg shadow-pink-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40"
             >
               {loading ? (
                 <RefreshCw className="w-4 h-4 animate-spin" />
               ) : (
                 <>
-                  <span>Get Your Link</span>
+                  <span>{isLoginMode ? "Log In" : "Create Link & Password"}</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
             </button>
           </form>
+
+          {/* Toggle Login / Register */}
+          <div className="mt-4 pt-3 text-center">
+            <button
+              type="button"
+              onClick={() => {
+                setIsLoginMode(!isLoginMode);
+                setError(null);
+              }}
+              className="text-xs text-zinc-400 hover:text-pink-400 transition-colors cursor-pointer"
+            >
+              {isLoginMode
+                ? "Don't have an account? Sign Up"
+                : "Already have an account? Log In"}
+            </button>
+          </div>
         </div>
       )}
 
-      {/* Tiny clean ad */}
-      <AdBanner slotId="bolo-home" className="mt-8" />
+      {/* Minimal clean ad */}
+      <AdBanner slotId="bolo-home" className="mt-6" />
     </div>
   );
 }
