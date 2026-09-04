@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import confetti from "canvas-confetti";
-import { Send, Dice5, CheckCircle2, RefreshCw } from "lucide-react";
+import { Send, Dice5, CheckCircle2, RefreshCw, MessageSquare } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import AdBanner from "@/components/AdBanner";
 
@@ -20,12 +20,42 @@ const QUICK_PROMPTS = [
 export default function UserMessagePage() {
   const params = useParams();
   const raw = params?.username as string | undefined;
-  const username = raw ? decodeURIComponent(raw).toLowerCase() : "";
+  const slug = raw ? decodeURIComponent(raw).toLowerCase() : "";
+
+  const [recipientUsername, setRecipientUsername] = useState<string | null>(null);
+  const [profileNotFound, setProfileNotFound] = useState(false);
+  const [checkingProfile, setCheckingProfile] = useState(true);
 
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!slug) return;
+    resolveRecipient();
+  }, [slug]);
+
+  const resolveRecipient = async () => {
+    try {
+      // Find profile by random link_identifier (display_name) or username
+      const { data: profile } = await supabase
+        .from("bolo_profiles")
+        .select("username, display_name")
+        .or(`display_name.eq.${slug},username.eq.${slug}`)
+        .maybeSingle();
+
+      if (profile && profile.username) {
+        setRecipientUsername(profile.username);
+      } else {
+        setProfileNotFound(true);
+      }
+    } catch {
+      setProfileNotFound(true);
+    } finally {
+      setCheckingProfile(false);
+    }
+  };
 
   const rollPrompt = () => {
     const random = QUICK_PROMPTS[Math.floor(Math.random() * QUICK_PROMPTS.length)];
@@ -34,14 +64,14 @@ export default function UserMessagePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!content.trim() || !username) return;
+    if (!content.trim() || !recipientUsername) return;
 
     setLoading(true);
     setError(null);
 
     try {
       const { error: insertError } = await supabase.from("bolo_messages").insert({
-        recipient_username: username,
+        recipient_username: recipientUsername,
         content: content.trim(),
         is_read: false,
       });
@@ -66,22 +96,56 @@ export default function UserMessagePage() {
     }
   };
 
+  if (checkingProfile) {
+    return (
+      <div className="flex-1 flex items-center justify-center py-20 text-zinc-500">
+        <RefreshCw className="w-5 h-5 animate-spin text-pink-500" />
+      </div>
+    );
+  }
+
+  if (profileNotFound) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-12 max-w-sm mx-auto w-full text-center">
+        <div className="w-12 h-12 rounded-2xl bg-zinc-900 text-zinc-500 flex items-center justify-center mb-3">
+          <MessageSquare className="w-6 h-6" />
+        </div>
+        <h1 className="text-lg font-bold text-white mb-1">Link not found</h1>
+        <p className="text-xs text-zinc-400 mb-6">
+          This Bolo link doesn't exist or may have been updated.
+        </p>
+        <Link
+          href="/"
+          className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-rose-600 text-white font-bold text-xs shadow-md shadow-pink-500/25"
+        >
+          Create Your Own Bolo Link
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-4 py-8 max-w-sm mx-auto w-full">
       {!sent ? (
-        /* Floating Sticker Card */
+        /* Floating Anonymous Sticker Card */
         <div className="w-full bg-gradient-to-b from-zinc-900 to-zinc-950 border border-white/10 rounded-3xl p-5 shadow-2xl backdrop-blur-xl relative">
-          {/* Sticker Header */}
-          <div className="flex items-center gap-3 mb-4 pb-4 border-b border-white/5">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-pink-500 to-rose-500 flex items-center justify-center text-white text-base font-bold shadow-md shadow-pink-500/25 shrink-0">
-              {username ? username[0].toUpperCase() : "B"}
+          {/* Sticker Header: Displays bolo.link branding, NO private username exposed */}
+          <div className="flex items-center justify-between mb-4 pb-4 border-b border-white/5">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-pink-500 to-rose-500 flex items-center justify-center text-white text-base font-bold shadow-md shadow-pink-500/25 shrink-0">
+                ✨
+              </div>
+              <div>
+                <p className="text-sm font-extrabold text-white leading-tight">
+                  send me anonymous messages
+                </p>
+                <p className="text-[11px] text-zinc-400">never know who sent it 🤫</p>
+              </div>
             </div>
-            <div className="truncate">
-              <h1 className="text-base font-extrabold text-white truncate">
-                @{username}
-              </h1>
-              <p className="text-xs text-zinc-400">send me anonymous messages</p>
-            </div>
+
+            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-white/5 text-pink-300 border border-white/5">
+              bolo.link
+            </span>
           </div>
 
           {/* Form */}
@@ -102,7 +166,7 @@ export default function UserMessagePage() {
                 <button
                   type="button"
                   onClick={rollPrompt}
-                  className="inline-flex items-center gap-1 text-xs text-pink-400 hover:text-pink-300 transition-colors"
+                  className="inline-flex items-center gap-1 text-xs text-pink-400 hover:text-pink-300 transition-colors cursor-pointer"
                 >
                   <Dice5 className="w-3.5 h-3.5" />
                   <span>Random idea</span>
@@ -148,22 +212,22 @@ export default function UserMessagePage() {
 
           <h2 className="text-xl font-black text-white mb-1">Sent! 🎉</h2>
           <p className="text-xs text-zinc-400 mb-6 max-w-xs">
-            @{username} received your message. They will never know who sent it!
+            Your anonymous message was delivered! They will never know who sent it.
           </p>
 
           <div className="flex flex-col gap-2 w-full">
             <button
               onClick={() => setSent(false)}
-              className="w-full py-3 rounded-2xl bg-white/10 hover:bg-white/15 text-white font-semibold text-xs transition-colors"
+              className="w-full py-3 rounded-2xl bg-white/10 hover:bg-white/15 text-white font-semibold text-xs transition-colors cursor-pointer"
             >
               Send Another Message
             </button>
 
             <Link
               href="/"
-              className="w-full py-3 rounded-2xl bg-gradient-to-r from-pink-500 to-rose-600 text-white font-bold text-xs shadow-md shadow-pink-500/20 transition-all"
+              className="w-full py-3 rounded-2xl bg-gradient-to-r from-pink-500 to-rose-600 text-white font-bold text-xs shadow-md shadow-pink-500/20 transition-all flex items-center justify-center"
             >
-              Get Your Own Link
+              Get Your Own Bolo Link
             </Link>
           </div>
         </div>

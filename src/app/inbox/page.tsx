@@ -21,6 +21,7 @@ import AdBanner from "@/components/AdBanner";
 
 export default function InboxPage() {
   const [user, setUser] = useState<string | null>(null);
+  const [linkId, setLinkId] = useState<string | null>(null);
   const [isRegistering, setIsRegistering] = useState(false);
   const [formUsername, setFormUsername] = useState("");
   const [formPassword, setFormPassword] = useState("");
@@ -48,6 +49,7 @@ export default function InboxPage() {
         const data = await res.json();
         if (data.authenticated && data.username) {
           setUser(data.username);
+          setLinkId(data.linkId || data.username);
           fetchMessages();
           return;
         }
@@ -126,6 +128,7 @@ export default function InboxPage() {
       }
 
       setUser(data.username);
+      setLinkId(data.linkId || data.username);
       localStorage.setItem("bolo_current_user", data.username);
       fetchMessages();
     } catch {
@@ -212,7 +215,7 @@ export default function InboxPage() {
 
   const copyLink = () => {
     if (!user) return;
-    const url = `${window.location.origin}/${user}`;
+    const url = `${window.location.origin}/${linkId || user}`;
     navigator.clipboard.writeText(url);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
@@ -461,7 +464,7 @@ export default function InboxPage() {
               {/* Header */}
               <div className="flex items-center justify-between z-10">
                 <span className="px-2.5 py-0.5 rounded-full bg-black/40 backdrop-blur-md text-[10px] font-bold text-white tracking-wide border border-white/10">
-                  bolo.link/{user}
+                  bolo.link
                 </span>
                 <span className="text-[10px] font-black text-pink-300 tracking-wider">
                   বলো • बोलो

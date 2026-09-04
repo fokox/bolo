@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { verifyPassword, hashPassword, signJWT } from "@/lib/jwt";
+import { generateLinkId } from "@/lib/linkId";
 
 export async function POST(request: Request) {
   try {
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
     // Fetch user profile from Supabase
     const { data: profile, error } = await supabase
       .from("bolo_profiles")
-      .select("id, username, secret_passcode")
+      .select("id, username, display_name, secret_passcode")
       .eq("username", username)
       .maybeSingle();
 
@@ -66,6 +67,16 @@ export async function POST(request: Request) {
       );
     }
 
+    // Ensure user has a clean random link identifier
+    let linkId = profile.display_name;
+    if (!linkId || linkId === profile.username) {
+      linkId = generateLinkId();
+      await supabase
+        .from("bolo_profiles")
+        .update({ display_name: linkId })
+        .eq("id", profile.id);
+    }
+
     // Sign JWT
     const token = await signJWT({
       username: profile.username,
@@ -75,6 +86,7 @@ export async function POST(request: Request) {
     const response = NextResponse.json({
       success: true,
       username: profile.username,
+      linkId,
       token,
     });
 

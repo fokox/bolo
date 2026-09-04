@@ -7,6 +7,7 @@ import AdBanner from "@/components/AdBanner";
 
 export default function HomePage() {
   const [activeUser, setActiveUser] = useState<string | null>(null);
+  const [activeLinkId, setActiveLinkId] = useState<string | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
 
   // Form State
@@ -16,7 +17,8 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [copied, setCopied] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedStickerText, setCopiedStickerText] = useState(false);
   const [origin, setOrigin] = useState("");
 
   useEffect(() => {
@@ -33,6 +35,7 @@ export default function HomePage() {
         const data = await res.json();
         if (data.authenticated && data.username) {
           setActiveUser(data.username);
+          setActiveLinkId(data.linkId || data.username);
         }
       }
     } catch {
@@ -81,6 +84,7 @@ export default function HomePage() {
       }
 
       setActiveUser(data.username);
+      setActiveLinkId(data.linkId || data.username);
       localStorage.setItem("bolo_current_user", data.username);
       setPassword("");
     } catch {
@@ -93,18 +97,23 @@ export default function HomePage() {
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     setActiveUser(null);
+    setActiveLinkId(null);
     localStorage.removeItem("bolo_current_user");
   };
 
+  const shareUrl = `${origin}/${activeLinkId || activeUser || "link"}`;
+
   const copyLink = () => {
-    if (!activeUser) return;
-    const url = `${origin}/${activeUser}`;
-    navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    navigator.clipboard.writeText(shareUrl);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  const shareUrl = `${origin}/${activeUser || "username"}`;
+  const copyStickerText = () => {
+    navigator.clipboard.writeText("bolo.link");
+    setCopiedStickerText(true);
+    setTimeout(() => setCopiedStickerText(false), 2000);
+  };
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-4 py-8 max-w-sm mx-auto w-full">
@@ -113,7 +122,7 @@ export default function HomePage() {
           <RefreshCw className="w-5 h-5 animate-spin text-pink-500" />
         </div>
       ) : activeUser ? (
-        /* Authenticated View: Active Link Card */
+        /* Authenticated View: Random Link Identifier */
         <div className="w-full flex flex-col items-center text-center animate-in fade-in duration-200">
           {/* Avatar / Handle */}
           <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-pink-500 via-rose-500 to-amber-400 p-0.5 mb-3 shadow-lg shadow-pink-500/20">
@@ -122,29 +131,36 @@ export default function HomePage() {
             </div>
           </div>
           <h1 className="text-xl font-black text-white">@{activeUser}</h1>
-          <p className="text-xs text-zinc-400 mt-0.5 mb-6">Your link is live & authenticated</p>
+          <p className="text-xs text-zinc-400 mt-0.5 mb-5">
+            Your private link identifier is active
+          </p>
 
-          {/* Copy Link Box */}
+          {/* Random Identifier Link Box */}
           <div className="w-full p-3 rounded-2xl bg-zinc-900 border border-white/10 flex items-center justify-between gap-2 mb-3">
-            <span className="text-xs font-mono text-zinc-300 truncate pl-1">
-              {shareUrl}
-            </span>
+            <div className="flex flex-col text-left truncate pl-1">
+              <span className="text-[10px] uppercase font-bold text-pink-400 tracking-wider">
+                Anonymous Link
+              </span>
+              <span className="text-xs font-mono text-zinc-200 truncate">
+                {shareUrl}
+              </span>
+            </div>
             <button
               onClick={copyLink}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-pink-500 hover:bg-pink-600 text-white text-xs font-bold transition-all active:scale-95 shrink-0"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-pink-500 hover:bg-pink-600 text-white text-xs font-bold transition-all active:scale-95 shrink-0"
             >
-              {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copied ? "Copied!" : "Copy"}</span>
+              {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copiedLink ? "Copied" : "Copy"}</span>
             </button>
           </div>
 
-          {/* Action Buttons */}
+          {/* Big Action Buttons */}
           <button
             onClick={copyLink}
-            className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-pink-500 via-rose-500 to-amber-500 hover:opacity-95 text-white font-bold text-sm shadow-lg shadow-pink-500/25 active:scale-95 transition-all flex items-center justify-center gap-2 mb-2.5 cursor-pointer"
+            className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-pink-500 via-rose-500 to-amber-500 hover:opacity-95 text-white font-bold text-sm shadow-lg shadow-pink-500/25 active:scale-95 transition-all flex items-center justify-center gap-2 mb-2 cursor-pointer"
           >
-            {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-            <span>{copied ? "Link Copied to Clipboard!" : "Copy Link for Instagram"}</span>
+            {copiedLink ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+            <span>{copiedLink ? "Link Copied!" : "1. Copy Link URL"}</span>
           </button>
 
           <Link
@@ -155,22 +171,34 @@ export default function HomePage() {
             <span>Open Private Inbox</span>
           </Link>
 
-          {/* Quick Guide */}
-          <div className="w-full p-4 rounded-2xl bg-zinc-950/60 border border-white/5 text-left text-xs space-y-2 mb-4">
-            <p className="font-semibold text-zinc-300 text-[11px] uppercase tracking-wider">
-              How to post on Instagram:
+          {/* Instagram Sticker Pro-Tip */}
+          <div className="w-full p-4 rounded-2xl bg-zinc-950/60 border border-white/5 text-left text-xs space-y-2.5 mb-4">
+            <p className="font-semibold text-zinc-200 text-[11px] uppercase tracking-wider flex items-center justify-between">
+              <span>How to make sticker say bolo.link:</span>
+              <button
+                onClick={copyStickerText}
+                className="text-pink-400 hover:underline font-bold lowercase text-[11px]"
+              >
+                {copiedStickerText ? "✓ Copied" : "Copy 'bolo.link'"}
+              </button>
             </p>
             <div className="flex items-start gap-2.5 text-zinc-400">
               <span className="w-5 h-5 rounded-full bg-white/5 text-zinc-300 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">
                 1
               </span>
-              <span>Open Instagram Story & tap the <b>Stickers</b> icon.</span>
+              <span>Tap the <b>Link sticker</b> on Instagram Story.</span>
             </div>
             <div className="flex items-start gap-2.5 text-zinc-400">
               <span className="w-5 h-5 rounded-full bg-white/5 text-zinc-300 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">
                 2
               </span>
-              <span>Select the <b>Link</b> sticker & paste your copied link.</span>
+              <span>Paste your copied link into <b>URL</b>.</span>
+            </div>
+            <div className="flex items-start gap-2.5 text-zinc-400">
+              <span className="w-5 h-5 rounded-full bg-white/5 text-zinc-300 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">
+                3
+              </span>
+              <span>Type <b>bolo.link</b> in <b>Customize sticker text</b>!</span>
             </div>
           </div>
 
@@ -195,8 +223,8 @@ export default function HomePage() {
           </h1>
           <p className="text-xs text-zinc-400 mb-6 max-w-xs">
             {isLoginMode
-              ? "Enter your username and password to access your link & inbox."
-              : "Create a username and password to protect your anonymous inbox."}
+              ? "Enter your credentials to access your link & inbox."
+              : "Create an account. Your link gets a private random identifier!"}
           </p>
 
           <form onSubmit={handleSubmit} className="w-full flex flex-col gap-3">
@@ -207,7 +235,7 @@ export default function HomePage() {
               </span>
               <input
                 type="text"
-                placeholder="your_instagram_handle"
+                placeholder="your_handle"
                 value={username}
                 onChange={(e) =>
                   setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_.]/g, ""))

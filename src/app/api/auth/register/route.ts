@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { hashPassword, signJWT } from "@/lib/jwt";
+import { generateLinkId } from "@/lib/linkId";
 
 export async function POST(request: Request) {
   try {
@@ -47,15 +48,18 @@ export async function POST(request: Request) {
     // Hash the password
     const hashedPassword = await hashPassword(rawPassword);
 
-    // Insert new profile
+    // Generate random short link identifier (e.g. "m7k2x9q")
+    const linkId = generateLinkId();
+
+    // Insert new profile with random link identifier
     const { data: newProfile, error: insertError } = await supabase
       .from("bolo_profiles")
       .insert({
         username,
-        display_name: username,
+        display_name: linkId,
         secret_passcode: hashedPassword,
       })
-      .select("id, username")
+      .select("id, username, display_name")
       .single();
 
     if (insertError || !newProfile) {
@@ -75,6 +79,7 @@ export async function POST(request: Request) {
     const response = NextResponse.json({
       success: true,
       username: newProfile.username,
+      linkId: newProfile.display_name || linkId,
       token,
     });
 
