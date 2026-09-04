@@ -12,16 +12,23 @@ import {
   RefreshCw,
   Copy,
   Check,
+  Lock,
+  LogOut,
   ArrowRight,
 } from "lucide-react";
 import { supabase, BoloMessage } from "@/lib/supabase";
 import AdBanner from "@/components/AdBanner";
 
 export default function InboxPage() {
-  const [username, setUsername] = useState<string | null>(null);
-  const [inputUsername, setInputUsername] = useState("");
+  const [user, setUser] = useState<string | null>(null);
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [formUsername, setFormUsername] = useState("");
+  const [formPassword, setFormPassword] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+
   const [messages, setMessages] = useState<BoloMessage[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingMessages, setLoadingMessages] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<BoloMessage | null>(null);
   const [replyText, setReplyText] = useState("");
   const [savingImage, setSavingImage] = useState(false);
@@ -29,29 +36,40 @@ export default function InboxPage() {
 
   const storyCardRef = useRef<HTMLDivElement>(null);
 
+  // Check existing session
   useEffect(() => {
-    const saved = localStorage.getItem("bolo_current_user");
-    if (saved) {
-      setUsername(saved);
-      fetchMessages(saved);
-    } else {
-      setLoading(false);
-    }
+    checkAuth();
   }, []);
 
-  // Realtime updates
+  const checkAuth = async () => {
+    try {
+      const res = await fetch("/api/auth/me");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.authenticated && data.username) {
+          setUser(data.username);
+          fetchMessages();
+          return;
+        }
+      }
+    } catch {
+      // not logged in
+    }
+  };
+
+  // Realtime updates when user is authenticated
   useEffect(() => {
-    if (!username) return;
+    if (!user) return;
 
     const channel = supabase
-      .channel("bolo-inbox-realtime")
+      .channel("bolo-inbox-realtime-secure")
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
           table: "bolo_messages",
-          filter: `recipient_username=eq.${username}`,
+          filter: `recipient_username=eq.${user}`,
         },
         (payload) => {
           const newMsg = payload.new as BoloMessage;
@@ -63,32 +81,65 @@ export default function InboxPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [username]);
+  }, [user]);
 
-  const fetchMessages = async (user: string) => {
-    setLoading(true);
+  const fetchMessages = async () => {
+    setLoadingMessages(true);
     try {
-      const { data } = await supabase
-        .from("bolo_messages")
-        .select("*")
-        .eq("recipient_username", user)
-        .order("created_at", { ascending: false });
-
-      setMessages(data || []);
+      const res = await fetch("/api/messages");
+      if (res.ok) {
+        const data = await res.json();
+        setMessages(data.messages || []);
+      } else if (res.status === 401) {
+        setUser(null);
+      }
     } catch (err) {
       console.error(err);
     } finally {
-      setLoading(false);
+      setLoadingMessages(false);
     }
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const clean = inputUsername.trim().toLowerCase().replace(/[^a-z0-9_.]/g, "");
-    if (!clean) return;
-    localStorage.setItem("bolo_current_user", clean);
-    setUsername(clean);
-    fetchMessages(clean);
+    setAuthError(null);
+    setAuthLoading(true);
+
+    const endpoint = isRegistering ? "/api/auth/register" : "/api/auth/login";
+
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: formUsername.trim().toLowerCase(),
+          password: formPassword,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setAuthError(data.error || "Authentication failed.");
+        setAuthLoading(false);
+        return;
+      }
+
+      setUser(data.username);
+      localStorage.setItem("bolo_current_user", data.username);
+      fetchMessages();
+    } catch {
+      setAuthError("Network error. Please try again.");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    setUser(null);
+    setMessages([]);
+    localStorage.removeItem("bolo_current_user");
   };
 
   const openMessage = async (msg: BoloMessage) => {
@@ -109,7 +160,7 @@ export default function InboxPage() {
     e.stopPropagation();
     setMessages((prev) => prev.filter((m) => m.id !== id));
     if (selectedMessage?.id === id) setSelectedMessage(null);
-    await supabase.from("bolo_messages").delete().eq("id", id);
+    await fetch(`/api/messages?id=${id}`, { method: "DELETE" });
   };
 
   const downloadStoryImage = async () => {
@@ -160,39 +211,110 @@ export default function InboxPage() {
   };
 
   const copyLink = () => {
-    if (!username) return;
-    const url = `${window.location.origin}/${username}`;
+    if (!user) return;
+    const url = `${window.location.origin}/${user}`;
     navigator.clipboard.writeText(url);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  if (!username) {
+  // Auth Screen (Login / Register)
+  if (!user) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center px-4 py-12 max-w-xs mx-auto w-full">
-        <h1 className="text-xl font-black text-white mb-2 text-center">Open Your Inbox</h1>
-        <p className="text-xs text-zinc-400 text-center mb-5">
-          Enter your Instagram username to see your messages.
-        </p>
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-10 max-w-sm mx-auto w-full">
+        <div className="w-full bg-zinc-900 border border-white/10 rounded-3xl p-6 shadow-2xl backdrop-blur-xl">
+          {/* Header */}
+          <div className="flex flex-col items-center text-center mb-5">
+            <div className="w-12 h-12 rounded-2xl bg-pink-500/10 text-pink-400 flex items-center justify-center mb-2.5">
+              <Lock className="w-5 h-5" />
+            </div>
+            <h1 className="text-xl font-black text-white">
+              {isRegistering ? "Create your account" : "Log in to your inbox"}
+            </h1>
+            <p className="text-xs text-zinc-400 mt-0.5">
+              {isRegistering
+                ? "Protect your inbox with a secure password"
+                : "Enter your username and password"}
+            </p>
+          </div>
 
-        <form onSubmit={handleLogin} className="w-full flex flex-col gap-2.5">
-          <input
-            type="text"
-            placeholder="your_username"
-            value={inputUsername}
-            onChange={(e) => setInputUsername(e.target.value)}
-            required
-            autoFocus
-            className="w-full px-4 py-3 bg-zinc-900 border border-white/10 rounded-2xl text-white text-sm focus:outline-none focus:border-pink-500"
-          />
-          <button
-            type="submit"
-            className="w-full py-3 rounded-2xl bg-gradient-to-r from-pink-500 to-rose-600 text-white font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-          >
-            <span>View Inbox</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-        </form>
+          {/* Form */}
+          <form onSubmit={handleAuthSubmit} className="flex flex-col gap-3">
+            <div>
+              <label className="block text-[11px] font-semibold text-zinc-400 mb-1">
+                Username
+              </label>
+              <div className="relative flex items-center">
+                <span className="absolute left-3.5 text-zinc-500 font-semibold text-sm">
+                  @
+                </span>
+                <input
+                  type="text"
+                  placeholder="your_handle"
+                  value={formUsername}
+                  onChange={(e) =>
+                    setFormUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_.]/g, ""))
+                  }
+                  required
+                  className="w-full pl-8 pr-3.5 py-2.5 bg-black/40 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-pink-500 font-medium"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-zinc-400 mb-1">
+                Password
+              </label>
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={formPassword}
+                onChange={(e) => setFormPassword(e.target.value)}
+                required
+                className="w-full px-3.5 py-2.5 bg-black/40 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-pink-500"
+              />
+            </div>
+
+            {authError && (
+              <p className="text-xs text-rose-400 bg-rose-500/10 rounded-xl p-2.5 text-center">
+                {authError}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={authLoading || !formUsername.trim() || !formPassword}
+              className="w-full mt-1 py-3 rounded-xl bg-gradient-to-r from-pink-500 via-rose-500 to-amber-500 hover:opacity-95 text-white font-bold text-xs shadow-lg shadow-pink-500/20 active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40"
+            >
+              {authLoading ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <>
+                  <span>{isRegistering ? "Sign Up & Get Link" : "Log In to Inbox"}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </>
+              )}
+            </button>
+          </form>
+
+          {/* Toggle Login/Register */}
+          <div className="mt-4 pt-4 border-t border-white/5 text-center">
+            <button
+              type="button"
+              onClick={() => {
+                setIsRegistering(!isRegistering);
+                setAuthError(null);
+              }}
+              className="text-xs text-zinc-400 hover:text-pink-400 transition-colors"
+            >
+              {isRegistering
+                ? "Already have an account? Log In"
+                : "Don't have an account? Sign Up"}
+            </button>
+          </div>
+        </div>
+
+        <AdBanner slotId="bolo-auth-bottom" className="mt-6" />
       </div>
     );
   }
@@ -201,7 +323,7 @@ export default function InboxPage() {
 
   return (
     <div className="flex-1 flex flex-col px-4 py-4 max-w-sm mx-auto w-full">
-      {/* Minimal Header */}
+      {/* Top Header */}
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl font-black text-white flex items-center gap-2">
@@ -212,16 +334,18 @@ export default function InboxPage() {
               </span>
             )}
           </h1>
-          <p className="text-xs text-zinc-400">@{username}</p>
+          <p className="text-xs text-zinc-400">@{user}</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <button
-            onClick={() => fetchMessages(username)}
+            onClick={fetchMessages}
             className="p-2 rounded-xl bg-zinc-900 text-zinc-400 hover:text-white transition-colors"
             title="Refresh"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-pink-400" : ""}`} />
+            <RefreshCw
+              className={`w-3.5 h-3.5 ${loadingMessages ? "animate-spin text-pink-400" : ""}`}
+            />
           </button>
           <button
             onClick={copyLink}
@@ -230,15 +354,22 @@ export default function InboxPage() {
             {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
             <span>{copiedLink ? "Copied" : "Copy Link"}</span>
           </button>
+          <button
+            onClick={handleLogout}
+            className="p-2 rounded-xl bg-zinc-900 text-zinc-500 hover:text-rose-400 transition-colors"
+            title="Log Out"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
 
       {/* Messages Feed */}
       <div className="flex-1 space-y-2.5">
-        {loading ? (
+        {loadingMessages ? (
           <div className="text-center py-16 text-zinc-500 text-xs flex flex-col items-center gap-2">
             <RefreshCw className="w-5 h-5 animate-spin text-pink-500" />
-            <span>Loading...</span>
+            <span>Loading messages...</span>
           </div>
         ) : messages.length === 0 ? (
           <div className="text-center py-14 px-4 rounded-3xl border border-white/5 bg-zinc-950/60">
@@ -330,14 +461,14 @@ export default function InboxPage() {
               {/* Header */}
               <div className="flex items-center justify-between z-10">
                 <span className="px-2.5 py-0.5 rounded-full bg-black/40 backdrop-blur-md text-[10px] font-bold text-white tracking-wide border border-white/10">
-                  bolo.link/{username}
+                  bolo.link/{user}
                 </span>
                 <span className="text-[10px] font-black text-pink-300 tracking-wider">
                   বলো • बोलो
                 </span>
               </div>
 
-              {/* Message Box (NGL Sticker Style) */}
+              {/* Message Box */}
               <div className="my-auto z-10 flex flex-col gap-2.5">
                 <div className="bg-white rounded-2xl p-4 shadow-xl text-zinc-900">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-pink-600 mb-1">
