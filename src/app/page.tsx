@@ -303,6 +303,82 @@ export default function HomePage() {
 
       {/* Minimal clean ad */}
       <AdBanner slotId="bolo-home" className="mt-6" />
+
+      {/* High-Value Editorial FAQ Section for Users & AdSense Crawlers */}
+      <div className="w-full mt-10 pt-8 border-t border-white/5 text-left">
+        <h2 className="text-sm font-extrabold text-white tracking-wide uppercase mb-1">
+          Frequently Asked Questions
+        </h2>
+        <p className="text-xs text-zinc-400 mb-6">
+          Everything you need to know about Bolo anonymous messaging.
+        </p>
+
+        <div className="space-y-3.5 text-xs">
+          <div className="p-4 rounded-2xl bg-zinc-900/60 border border-white/5">
+            <h3 className="font-bold text-white mb-1.5 flex items-center gap-1.5">
+              <span>✨</span> What is Bolo and how does it work?
+            </h3>
+            <p className="text-zinc-400 leading-relaxed">
+              Bolo (meaning &quot;Say it&quot; in Bangla, Hindi, and regional languages) is a modern anonymous Q&amp;A platform.
+              You create your personal link, add it as a sticker to your Instagram Story or WhatsApp Status,
+              and receive 100% anonymous questions and confessions in your private inbox.
+            </p>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-zinc-900/60 border border-white/5">
+            <h3 className="font-bold text-white mb-1.5 flex items-center gap-1.5">
+              <span>🔒</span> Are messages really 100% anonymous?
+            </h3>
+            <p className="text-zinc-400 leading-relaxed">
+              Yes, completely! Senders do not need to log in or provide any personal details.
+              We never track or share the sender&apos;s identity, phone number, or social media profile with the recipient.
+            </p>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-zinc-900/60 border border-white/5">
+            <h3 className="font-bold text-white mb-1.5 flex items-center gap-1.5">
+              <span>📱</span> How do I make my Instagram sticker say bolo.link?
+            </h3>
+            <p className="text-zinc-400 leading-relaxed">
+              When creating an Instagram Story, select the <b>Link</b> sticker, paste your Bolo URL, and in the
+              <b>&quot;Customize sticker text&quot;</b> field, type <b>bolo.link</b>. Your sticker will display as
+              a clean, professional <span className="text-pink-400 font-mono">bolo.link</span> sticker!
+            </p>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-zinc-900/60 border border-white/5">
+            <h3 className="font-bold text-white mb-1.5 flex items-center gap-1.5">
+              <span>🛡️</span> How does Bolo prevent bullying and harassment?
+            </h3>
+            <p className="text-zinc-400 leading-relaxed">
+              Safety is our top priority. Recipients can delete any unwanted message with 1 tap.
+              Our platform operates on a strict zero-tolerance policy against cyberbullying, hate speech,
+              and doxxing. For more, read our <a href="/terms" className="text-pink-400 underline">Terms of Service</a>.
+            </p>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-zinc-900/60 border border-white/5">
+            <h3 className="font-bold text-white mb-1.5 flex items-center gap-1.5">
+              <span>⚡</span> Do my friends need to install an app to send messages?
+            </h3>
+            <p className="text-zinc-400 leading-relaxed">
+              No apps required! When followers tap your link in Instagram, it opens an ultra-fast web page
+              in their browser that loads in milliseconds on any mobile device.
+            </p>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-zinc-900/60 border border-white/5">
+            <h3 className="font-bold text-white mb-1.5 flex items-center gap-1.5">
+              <span>🎨</span> How do I share replies back to my Instagram Story?
+            </h3>
+            <p className="text-zinc-400 leading-relaxed">
+              Inside your Bolo inbox, tap any message to open the Story Card generator.
+              Type your answer, hit <b>Save Image</b>, and post the generated high-resolution card
+              directly to your Story!
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
