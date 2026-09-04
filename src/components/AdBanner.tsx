@@ -5,60 +5,36 @@ import React from "react";
 interface AdBannerProps {
   slotId?: string;
   className?: string;
-  format?: "horizontal" | "compact";
 }
 
 /**
- * Clean, non-intrusive native banner ad slot.
- * Designed to fit seamlessly into the design without obnoxious popups or layout shifts.
+ * Ultra-minimal, non-intrusive native ad slot.
+ * Clean single-line bar designed to avoid clutter or layout shifts.
  */
 export default function AdBanner({
-  slotId = "bolo-default-banner",
+  slotId = "bolo-ad-slot",
   className = "",
-  format = "horizontal",
 }: AdBannerProps) {
   return (
     <div
-      className={`w-full mx-auto my-4 transition-all duration-200 ${className}`}
+      className={`w-full max-w-sm mx-auto my-3 ${className}`}
       data-ad-slot={slotId}
     >
-      <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-r from-zinc-900/70 via-zinc-800/50 to-zinc-900/70 backdrop-blur-md p-3 px-4 shadow-sm text-center">
-        {/* Subtle 'Ad' pill badge */}
-        <div className="flex items-center justify-between text-[10px] uppercase font-semibold tracking-wider text-zinc-500 mb-1.5">
-          <span>Sponsored</span>
-          <span className="bg-zinc-800 px-1.5 py-0.5 rounded text-[9px] text-zinc-400">Ad</span>
+      <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-zinc-900/60 border border-white/5 text-xs text-zinc-400 backdrop-blur-sm">
+        <div className="flex items-center gap-2 truncate">
+          <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/10 text-zinc-400">
+            Ad
+          </span>
+          <span className="truncate text-zinc-300">
+            Bolo • Free anonymous questions
+          </span>
         </div>
-
-        {/* Minimalist Native Ad Display Area */}
-        {format === "horizontal" ? (
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 py-1">
-            <div className="flex items-center gap-3 text-left">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-pink-500 to-violet-600 flex items-center justify-center text-white text-xs font-bold shadow-sm shrink-0">
-                ✨
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-zinc-200 line-clamp-1">
-                  Connect & Express Freely with Bolo
-                </p>
-                <p className="text-[11px] text-zinc-400 line-clamp-1">
-                  Share questions with zero friction. Free forever.
-                </p>
-              </div>
-            </div>
-            <a
-              href="/"
-              className="w-full sm:w-auto text-center px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-medium text-zinc-100 transition-colors border border-white/10 shrink-0"
-            >
-              Get Started
-            </a>
-          </div>
-        ) : (
-          <div className="py-2">
-            <p className="text-xs font-medium text-zinc-300">
-              Discover honest thoughts with friends on Bolo 🚀
-            </p>
-          </div>
-        )}
+        <a
+          href="/"
+          className="text-pink-400 hover:text-pink-300 font-medium shrink-0 ml-2 text-[11px]"
+        >
+          Try it →
+        </a>
       </div>
     </div>
   );

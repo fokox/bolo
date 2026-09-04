@@ -5,8 +5,6 @@ import Link from "next/link";
 import { toPng } from "html-to-image";
 import {
   Inbox as InboxIcon,
-  MessageSquare,
-  Sparkles,
   Trash2,
   Share2,
   Download,
@@ -14,7 +12,6 @@ import {
   RefreshCw,
   Copy,
   Check,
-  Lock,
   ArrowRight,
 } from "lucide-react";
 import { supabase, BoloMessage } from "@/lib/supabase";
@@ -27,7 +24,7 @@ export default function InboxPage() {
   const [loading, setLoading] = useState(true);
   const [selectedMessage, setSelectedMessage] = useState<BoloMessage | null>(null);
   const [replyText, setReplyText] = useState("");
-  const [generatingImage, setGeneratingImage] = useState(false);
+  const [savingImage, setSavingImage] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
   const storyCardRef = useRef<HTMLDivElement>(null);
@@ -42,12 +39,12 @@ export default function InboxPage() {
     }
   }, []);
 
-  // Listen to realtime incoming messages via Supabase Realtime
+  // Realtime updates
   useEffect(() => {
     if (!username) return;
 
     const channel = supabase
-      .channel("bolo-realtime-messages")
+      .channel("bolo-inbox-realtime")
       .on(
         "postgres_changes",
         {
@@ -71,16 +68,15 @@ export default function InboxPage() {
   const fetchMessages = async (user: string) => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("bolo_messages")
         .select("*")
         .eq("recipient_username", user)
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
       setMessages(data || []);
     } catch (err) {
-      console.error("Error loading messages:", err);
+      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -88,18 +84,17 @@ export default function InboxPage() {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    const clean = inputUsername.trim().toLowerCase().replace(/[^a-z0-9_]/g, "");
+    const clean = inputUsername.trim().toLowerCase().replace(/[^a-z0-9_.]/g, "");
     if (!clean) return;
     localStorage.setItem("bolo_current_user", clean);
     setUsername(clean);
     fetchMessages(clean);
   };
 
-  const markAsRead = async (msg: BoloMessage) => {
+  const openMessage = async (msg: BoloMessage) => {
     setSelectedMessage(msg);
     setReplyText("");
     if (!msg.is_read) {
-      // Optimistic update
       setMessages((prev) =>
         prev.map((m) => (m.id === msg.id ? { ...m, is_read: true } : m))
       );
@@ -119,29 +114,27 @@ export default function InboxPage() {
 
   const downloadStoryImage = async () => {
     if (!storyCardRef.current) return;
-    setGeneratingImage(true);
-
+    setSavingImage(true);
     try {
       const dataUrl = await toPng(storyCardRef.current, {
         cacheBust: true,
-        pixelRatio: 2, // High resolution for mobile screens
+        pixelRatio: 2,
       });
 
       const link = document.createElement("a");
-      link.download = `bolo-story-${Date.now()}.png`;
+      link.download = `bolo-${Date.now()}.png`;
       link.href = dataUrl;
       link.click();
     } catch (err) {
-      console.error("Failed to generate story image:", err);
+      console.error(err);
     } finally {
-      setGeneratingImage(false);
+      setSavingImage(false);
     }
   };
 
   const shareNative = async () => {
     if (!storyCardRef.current) return;
-    setGeneratingImage(true);
-
+    setSavingImage(true);
     try {
       const dataUrl = await toPng(storyCardRef.current, {
         cacheBust: true,
@@ -154,22 +147,19 @@ export default function InboxPage() {
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
           files: [file],
-          title: "My Bolo Anonymous Reply",
-          text: `Reply on Bolo: bolo.link/${username}`,
+          title: "Bolo Anonymous Reply",
         });
       } else {
-        // Fallback to download
         downloadStoryImage();
       }
-    } catch (err) {
-      console.error(err);
+    } catch {
       downloadStoryImage();
     } finally {
-      setGeneratingImage(false);
+      setSavingImage(false);
     }
   };
 
-  const copyProfileLink = () => {
+  const copyLink = () => {
     if (!username) return;
     const url = `${window.location.origin}/${username}`;
     navigator.clipboard.writeText(url);
@@ -179,30 +169,28 @@ export default function InboxPage() {
 
   if (!username) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center px-4 py-12 max-w-sm mx-auto w-full">
-        <div className="w-16 h-16 rounded-3xl bg-pink-500/20 text-pink-400 flex items-center justify-center mb-5 border border-pink-500/30 shadow-lg">
-          <Lock className="w-8 h-8" />
-        </div>
-        <h1 className="text-2xl font-black text-white mb-2 text-center">Open Your Inbox</h1>
-        <p className="text-xs text-zinc-400 text-center mb-6">
-          Enter your username to view your anonymous messages.
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-12 max-w-xs mx-auto w-full">
+        <h1 className="text-xl font-black text-white mb-2 text-center">Open Your Inbox</h1>
+        <p className="text-xs text-zinc-400 text-center mb-5">
+          Enter your Instagram username to see your messages.
         </p>
 
-        <form onSubmit={handleLogin} className="w-full flex flex-col gap-3">
+        <form onSubmit={handleLogin} className="w-full flex flex-col gap-2.5">
           <input
             type="text"
-            placeholder="Your username"
+            placeholder="your_username"
             value={inputUsername}
             onChange={(e) => setInputUsername(e.target.value)}
             required
-            className="w-full px-4 py-3.5 bg-zinc-900 border border-white/10 rounded-2xl text-white placeholder-zinc-500 text-sm focus:outline-none focus:border-pink-500"
+            autoFocus
+            className="w-full px-4 py-3 bg-zinc-900 border border-white/10 rounded-2xl text-white text-sm focus:outline-none focus:border-pink-500"
           />
           <button
             type="submit"
-            className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 text-white font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-md"
+            className="w-full py-3 rounded-2xl bg-gradient-to-r from-pink-500 to-rose-600 text-white font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
           >
-            <span>Access Inbox</span>
-            <ArrowRight className="w-4 h-4" />
+            <span>View Inbox</span>
+            <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </form>
       </div>
@@ -212,15 +200,15 @@ export default function InboxPage() {
   const unreadCount = messages.filter((m) => !m.is_read).length;
 
   return (
-    <div className="flex-1 flex flex-col px-4 py-6 max-w-xl mx-auto w-full">
-      {/* Top Header */}
-      <div className="flex items-center justify-between mb-5">
+    <div className="flex-1 flex flex-col px-4 py-4 max-w-sm mx-auto w-full">
+      {/* Minimal Header */}
+      <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-2xl font-black text-white flex items-center gap-2">
+          <h1 className="text-xl font-black text-white flex items-center gap-2">
             Inbox
             {unreadCount > 0 && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-pink-500 text-white font-bold animate-pulse">
-                {unreadCount} new
+              <span className="text-[11px] px-2 py-0.5 rounded-full bg-pink-500 text-white font-bold">
+                {unreadCount}
               </span>
             )}
           </h1>
@@ -230,67 +218,67 @@ export default function InboxPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => fetchMessages(username)}
-            className="p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-white/10 transition-colors"
+            className="p-2 rounded-xl bg-zinc-900 text-zinc-400 hover:text-white transition-colors"
             title="Refresh"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-pink-400" : ""}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-pink-400" : ""}`} />
           </button>
           <button
-            onClick={copyProfileLink}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-pink-500/20 hover:bg-pink-500/30 text-pink-300 border border-pink-500/30 text-xs font-semibold transition-all"
+            onClick={copyLink}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-pink-500/20 text-pink-300 text-xs font-semibold hover:bg-pink-500/30 transition-all"
           >
             {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-            <span>{copiedLink ? "Copied" : "Share Link"}</span>
+            <span>{copiedLink ? "Copied" : "Copy Link"}</span>
           </button>
         </div>
       </div>
 
-      {/* Messages List */}
-      <div className="flex-1 space-y-3">
+      {/* Messages Feed */}
+      <div className="flex-1 space-y-2.5">
         {loading ? (
-          <div className="text-center py-16 text-zinc-500 text-sm flex flex-col items-center gap-2">
-            <RefreshCw className="w-6 h-6 animate-spin text-pink-500" />
-            <span>Loading messages...</span>
+          <div className="text-center py-16 text-zinc-500 text-xs flex flex-col items-center gap-2">
+            <RefreshCw className="w-5 h-5 animate-spin text-pink-500" />
+            <span>Loading...</span>
           </div>
         ) : messages.length === 0 ? (
-          <div className="text-center py-16 px-4 rounded-3xl border border-dashed border-white/10 bg-zinc-950/40">
-            <div className="w-14 h-14 rounded-2xl bg-zinc-900 text-zinc-500 flex items-center justify-center mx-auto mb-3">
-              <InboxIcon className="w-7 h-7" />
+          <div className="text-center py-14 px-4 rounded-3xl border border-white/5 bg-zinc-950/60">
+            <div className="w-12 h-12 rounded-2xl bg-zinc-900 text-zinc-500 flex items-center justify-center mx-auto mb-2.5">
+              <InboxIcon className="w-6 h-6" />
             </div>
-            <h3 className="text-base font-bold text-white mb-1">No messages yet</h3>
-            <p className="text-xs text-zinc-400 max-w-xs mx-auto mb-5">
-              Put your Bolo link on your Instagram Story so your friends and followers can send you anonymous questions!
+            <p className="text-sm font-bold text-white mb-1">No messages yet</p>
+            <p className="text-xs text-zinc-400 max-w-xs mx-auto mb-4">
+              Share your Bolo link on your Instagram Story to receive anonymous questions.
             </p>
             <button
-              onClick={copyProfileLink}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-rose-600 text-white text-xs font-bold shadow-md shadow-pink-500/25 active:scale-95 transition-all"
+              onClick={copyLink}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-pink-500 text-white text-xs font-bold active:scale-95 transition-all"
             >
-              <Copy className="w-4 h-4" />
-              <span>Copy Link for Instagram</span>
+              <Copy className="w-3.5 h-3.5" />
+              <span>{copiedLink ? "Copied to Clipboard!" : "Copy Link"}</span>
             </button>
           </div>
         ) : (
           messages.map((msg) => (
             <div
               key={msg.id}
-              onClick={() => markAsRead(msg)}
-              className={`p-4 rounded-2xl border transition-all cursor-pointer group flex items-start justify-between gap-3 ${
+              onClick={() => openMessage(msg)}
+              className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-start justify-between gap-3 ${
                 msg.is_read
-                  ? "bg-zinc-900/50 border-white/5 hover:border-white/15"
-                  : "bg-gradient-to-r from-pink-950/40 to-zinc-900/80 border-pink-500/40 hover:border-pink-500 shadow-sm"
+                  ? "bg-zinc-900/40 border-white/5 hover:border-white/10"
+                  : "bg-zinc-900 border-pink-500/30 hover:border-pink-500 shadow-sm"
               }`}
             >
-              <div className="flex items-start gap-3 flex-1">
-                <div
-                  className={`w-2.5 h-2.5 rounded-full mt-1.5 shrink-0 ${
-                    msg.is_read ? "bg-zinc-700" : "bg-pink-500 ring-4 ring-pink-500/20"
+              <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                <span
+                  className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
+                    msg.is_read ? "bg-transparent" : "bg-pink-500"
                   }`}
                 />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-zinc-100 line-clamp-2 leading-relaxed">
-                    "{msg.content}"
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-zinc-100 line-clamp-2">
+                    {msg.content}
                   </p>
-                  <p className="text-[10px] text-zinc-500 mt-1 font-mono">
+                  <p className="text-[10px] text-zinc-500 mt-1">
                     {new Date(msg.created_at).toLocaleDateString(undefined, {
                       month: "short",
                       day: "numeric",
@@ -302,15 +290,14 @@ export default function InboxPage() {
               </div>
 
               <div className="flex items-center gap-1 shrink-0">
-                <span className="text-[11px] font-semibold text-pink-400 group-hover:underline hidden sm:inline mr-2">
+                <span className="text-[11px] font-semibold text-pink-400 mr-1">
                   Reply
                 </span>
                 <button
                   onClick={(e) => deleteMessage(msg.id, e)}
-                  className="p-2 rounded-xl text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
-                  title="Delete message"
+                  className="p-1.5 rounded-lg text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
@@ -318,108 +305,90 @@ export default function InboxPage() {
         )}
       </div>
 
-      {/* Minimal clean Ad Banner at bottom of inbox */}
-      <AdBanner slotId="bolo-inbox-bottom" className="mt-6" />
+      <AdBanner slotId="bolo-inbox-bottom" className="mt-4" />
 
       {/* Story Reply Modal */}
       {selectedMessage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
-          <div className="bg-zinc-900 border border-white/10 rounded-3xl p-5 max-w-sm w-full shadow-2xl relative my-auto">
-            {/* Close Button */}
+          <div className="bg-zinc-900 border border-white/10 rounded-3xl p-4 max-w-xs w-full shadow-2xl relative my-auto">
             <button
               onClick={() => setSelectedMessage(null)}
-              className="absolute top-4 right-4 p-2 rounded-full bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white transition-colors"
+              className="absolute top-3 right-3 p-1.5 rounded-full bg-white/10 text-zinc-300 hover:text-white transition-colors"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
 
-            <h3 className="text-sm font-bold text-zinc-300 mb-3 flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-pink-400" />
+            <h3 className="text-xs font-bold text-zinc-400 mb-2.5">
               Instagram Story Card
             </h3>
 
-            {/* Renderable Instagram Story Card Preview */}
+            {/* Renderable Story Sticker */}
             <div
               ref={storyCardRef}
-              className="w-full aspect-[9/14] rounded-2xl p-5 flex flex-col justify-between relative overflow-hidden shadow-2xl bg-gradient-to-br from-indigo-950 via-purple-900 to-rose-950 border border-white/20"
+              className="w-full aspect-[9/13] rounded-2xl p-4 flex flex-col justify-between relative overflow-hidden shadow-2xl bg-gradient-to-br from-purple-900 via-pink-900 to-rose-950 border border-white/20"
             >
-              {/* Background ambient glow */}
-              <div className="absolute top-0 right-0 w-32 h-32 bg-pink-500/30 rounded-full blur-3xl pointer-events-none" />
-              <div className="absolute bottom-0 left-0 w-32 h-32 bg-indigo-500/30 rounded-full blur-3xl pointer-events-none" />
-
-              {/* Top Branding Pill */}
+              {/* Header */}
               <div className="flex items-center justify-between z-10">
-                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/40 backdrop-blur-md border border-white/15">
-                  <span className="w-2 h-2 rounded-full bg-pink-400 animate-pulse" />
-                  <span className="text-[11px] font-bold text-white tracking-wide">
-                    bolo.link/{username}
-                  </span>
-                </div>
-                <span className="text-[10px] font-bold tracking-widest text-pink-300/80 uppercase">
+                <span className="px-2.5 py-0.5 rounded-full bg-black/40 backdrop-blur-md text-[10px] font-bold text-white tracking-wide border border-white/10">
+                  bolo.link/{username}
+                </span>
+                <span className="text-[10px] font-black text-pink-300 tracking-wider">
                   বলো • बोलो
                 </span>
               </div>
 
-              {/* Center Question Card (NGL / Story Style) */}
-              <div className="my-auto z-10 flex flex-col gap-3">
+              {/* Message Box (NGL Sticker Style) */}
+              <div className="my-auto z-10 flex flex-col gap-2.5">
                 <div className="bg-white rounded-2xl p-4 shadow-xl text-zinc-900">
-                  <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-pink-600 mb-1.5">
-                    <MessageSquare className="w-3.5 h-3.5" />
-                    <span>Send me anonymous messages</span>
-                  </div>
-                  <p className="text-base font-extrabold leading-snug">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-pink-600 mb-1">
+                    Send me anonymous messages
+                  </p>
+                  <p className="text-sm font-extrabold leading-tight">
                     "{selectedMessage.content}"
                   </p>
                 </div>
 
-                {/* Optional Reply Bubble */}
                 {replyText.trim() && (
-                  <div className="bg-black/70 backdrop-blur-md border border-white/20 rounded-2xl p-3.5 text-white shadow-lg animate-in fade-in duration-150">
-                    <p className="text-[10px] uppercase font-bold text-pink-300 tracking-wider mb-0.5">
-                      My Reply:
-                    </p>
-                    <p className="text-sm font-semibold">{replyText}</p>
+                  <div className="bg-black/80 backdrop-blur-md border border-white/20 rounded-2xl p-3 text-white shadow-lg">
+                    <p className="text-xs font-semibold">{replyText}</p>
                   </div>
                 )}
               </div>
 
-              {/* Bottom Tagline */}
               <div className="text-center z-10">
-                <p className="text-[10px] font-medium text-white/70">
+                <p className="text-[9px] text-white/60">
                   Ask me anything anonymously on Bolo ✨
                 </p>
               </div>
             </div>
 
-            {/* Reply Input Box */}
-            <div className="mt-3">
-              <input
-                type="text"
-                placeholder="Type your reply here..."
-                value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-white placeholder-zinc-500 text-xs focus:outline-none focus:border-pink-500"
-              />
-            </div>
+            {/* Type Answer */}
+            <input
+              type="text"
+              placeholder="Type your reply..."
+              value={replyText}
+              onChange={(e) => setReplyText(e.target.value)}
+              className="w-full mt-2.5 px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white placeholder-zinc-500 text-xs focus:outline-none focus:border-pink-500"
+            />
 
-            {/* Action Buttons */}
-            <div className="grid grid-cols-2 gap-2 mt-3">
+            {/* Buttons */}
+            <div className="grid grid-cols-2 gap-2 mt-2.5">
               <button
                 onClick={downloadStoryImage}
-                disabled={generatingImage}
-                className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold transition-all disabled:opacity-50"
+                disabled={savingImage}
+                className="flex items-center justify-center gap-1 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold transition-all disabled:opacity-50 cursor-pointer"
               >
-                <Download className="w-4 h-4" />
-                <span>{generatingImage ? "Saving..." : "Save Image"}</span>
+                <Download className="w-3.5 h-3.5" />
+                <span>{savingImage ? "Saving..." : "Save Image"}</span>
               </button>
 
               <button
                 onClick={shareNative}
-                disabled={generatingImage}
-                className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 text-white text-xs font-bold shadow-md shadow-pink-500/25 transition-all disabled:opacity-50"
+                disabled={savingImage}
+                className="flex items-center justify-center gap-1 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-rose-600 text-white text-xs font-bold shadow-md shadow-pink-500/25 transition-all disabled:opacity-50 cursor-pointer"
               >
-                <Share2 className="w-4 h-4" />
-                <span>Share to Story</span>
+                <Share2 className="w-3.5 h-3.5" />
+                <span>Share Story</span>
               </button>
             </div>
           </div>
